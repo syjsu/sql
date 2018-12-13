@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>SQL</title>
+    <style type="text/css">
+    html {
+        background: #ddd;
+        margin: auto;
+        width: 95%;
+    }
+
+    body {
+        background: linear-gradient(#aaa 0, #ddd 10px, #fff 55px);
+        border: 1px solid black;
+        padding: 10px 20px;
+        box-shadow: 5px 0px 30px #000;
+        border-radius: 8px;
+    }
+
+    h1 {
+        text-align: center;
+        color: #222;
+        margin: 0 0 30px;
+    }
+
+    .button {
+        color: #333;
+        background: linear-gradient(#eee, #ddd);
+        border: 1px solid #222;
+        border-radius: 3px;
+        padding: 7px;
+        margin-right: 5px;
+        transition: .3s;
+        font-family: ubuntu, sans-serif;
+        font-size: 1em;
+    }
+
+    .button:active {
+        background: linear-gradient(#ddd, #eee);
+    }
+
+    .button:hover,
+    button:focus {
+        box-shadow: 0 0 2px #222;
+    }
+
+    #execute {
+        margin-top: 5px;
+        ;
+        width: 10%;
+        min-width: 100px;
+    }
+
+    .CodeMirror {
+        border: 1px solid #222;
+        height: auto;
+    }
+
+    .CodeMirror-scroll {
+        overflow-y: hidden;
+        overflow-x: auto;
+    }
+
+    .error {
+        color: red;
+        transition: .5s;
+        overflow: hidden;
+    }
+
+    #output {
+        overflow: auto;
+    }
+
+    table {
+        width: auto;
+        margin: auto;
+        border: 1px solid black;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+    }
+
+    th,
+    td {
+        border: 1px solid #777;
+    }
+
+    footer {
+        font-size: .8em;
+        color: #222;
+    }
+
+    textarea {
+        border-radius: 3px;
+        border: 1px solid #000;
+    }
+    </style>
+</head>
+
+<body>
+    <center>
+        <main>
+            <label for='commands'>输入数据库语句</label>
+            <br>
+            <textarea id="commands" rows="30" style="width: 100%;height: auto;">/* 清除原有表 */
+drop table if exists employees;
+
+/* 创建员工表 */
+create table employees( 
+	id  integer,	/* 工号 */
+	name    text,	/* 名字 */
+	designation text,	/* 职位 */ 
+	manager integer,	/* 上级 */
+	hired_on    date,	/* 雇用日期 */
+	salary  integer,	/* 薪水 */
+	commission  float,	/* 佣金 */   
+	dept    integer		/* 部门编号 */
+);
+
+/* 插入相关数值 */
+insert into employees values (1,'小明','ADMIN',6,'1990-12-17',1800,null,4);
+insert into employees values (2,'小红','MANAGER',9,'1998-02-02',5200,300,3);
+insert into employees values (3,'小强','SALES I',2,'1996-01-02',2500,500,3);
+insert into employees values (4,'小张','SALES I',2,'1990-04-02',2700,null,3);
+insert into employees values (5,'小黄','TECH',6,'1994-06-23',2250,1400,4);
+insert into employees values (6,'小白','MANAGER',9,'1993-05-01',5400,null,4);
+insert into employees values (7,'小绿','TECH',6,'1997-09-22',2500,null,4);
+insert into employees values (8,'小紫','ENGINEER',10,'1997-03-30',3200,null,2);
+insert into employees values (9,'小黑','CEO',null,'1990-01-01',7500,null,4);
+insert into employees values (10,'小猫','MANAGER',9,'1994-08-09',5600,null,2);
+insert into employees values (11,'小狗','ENGINEER',10,'1996-03-15',3400,null,2);
+insert into employees values (12,'小猪','ADMIN',6,'1998-04-16',1800,null,4);
+insert into employees values (13,'小李','ENGINEER',10,'2000-12-03',3000,null,2);
+insert into employees values (14,'小鸡','CPA',9,'1995-10-12',3500,null,1);
+
+/* 筛选平均薪水 */
+select designation as `职位`,count(*) as `职位人数`, (avg(salary)) as `平均薪水` 
+from employees 
+group by designation
+order by `平均薪水`
+desc;
+
+/* 筛选雇员信息 */
+select name as `雇员名字`,designation as `职位`,salary as `薪水`,hired_on as `雇用日期` from employees 
+order by hired_on;</textarea>
+            <br>
+            <button id="execute" class="button">执行</button>
+            <button id='savedb' class="button">保存数据库</button>
+            <label class="button">加载数据库 <input type='file' id='dbfile'></label>
+            <div id="error" class="error"></div>
+            <pre id="output">结果显示区域</pre>
+        </main>
+    </center>
+    <script type="text/javascript">
+    //定义
+    var execBtn = document.getElementById("execute");
+    var outputElm = document.getElementById('output');
+    var errorElm = document.getElementById('error');
+    var commandsElm = document.getElementById('commands');
+    var dbFileElm = document.getElementById('dbfile');
+    var savedbElm = document.getElementById('savedb');
+
+    //加载数据库
+    var worker = new Worker("worker.sql.js");
+    worker.onerror = error;
+
+    //打开数据库
+    worker.postMessage({ action: 'open' });
+
+    //输出HTML
+    function print(text) {
+        outputElm.innerHTML = text.replace(/\n/g, '<br>');
+    }
+
+    //错误信息
+    function error(e) {
+        console.log(e);
+        errorElm.style.height = '2em';
+        errorElm.textContent = e.message;
+    }
+
+    //没有错误信息
+    function noerror() {
+        errorElm.style.height = '0';
+    }
+
+    //执行SQL语句
+    function execute(commands) {
+        tic();
+        worker.onmessage = function(event) {
+            var results = event.data.results;
+            toc("Executing SQL");
+
+            tic();
+            outputElm.innerHTML = "";
+            for (var i = 0; i < results.length; i++) {
+                outputElm.appendChild(tableCreate(results[i].columns, results[i].values));
+            }
+            toc("Displaying results");
+        }
+        worker.postMessage({ action: 'exec', sql: commands });
+        outputElm.textContent = "正在执行语句，请稍后...";
+    }
+
+    //创建HTML表格
+    var tableCreate = function() {
+        function valconcat(vals, tagName) {
+            if (vals.length === 0) return '';
+            var open = '<' + tagName + '>',
+                close = '</' + tagName + '>';
+            return open + vals.join(close + open) + close;
+        }
+        return function(columns, values) {
+            var tbl = document.createElement('table');
+            var html = '<thead>' + valconcat(columns, 'th') + '</thead>';
+            var rows = values.map(function(v) { return valconcat(v, 'td'); });
+            html += '<tbody>' + valconcat(rows, 'tr') + '</tbody>';
+            tbl.innerHTML = html;
+            return tbl;
+        }
+    }();
+
+    //执行SQL命令
+    function execEditorContents() {
+        noerror()
+        //console.log(commandsElm.value);
+        execute(commandsElm.value + ';');
+    }
+    execBtn.addEventListener("click", execEditorContents, true);
+
+    //显示执行后的结果
+    var tictime;
+    if (!window.performance || !performance.now) { window.performance = { now: Date.now } }
+
+    function tic() { tictime = performance.now() }
+
+    function toc(msg) {
+        var dt = performance.now() - tictime;
+        console.log((msg || 'toc') + ": " + dt + "ms");
+    }
+
+    //从本地加载SQL文件
+    dbFileElm.onchange = function() {
+        var f = dbFileElm.files[0];
+        var r = new FileReader();
+        r.onload = function() {
+            worker.onmessage = function() {
+                toc("Loading database from file");
+                // Show the schema of the loaded database
+                commandsElm.value = ("SELECT `name`, `sql`\n  FROM `sqlite_master`\n  WHERE type='table';");
+                execEditorContents();
+            };
+            tic();
+            try {
+                worker.postMessage({ action: 'open', buffer: r.result }, [r.result]);
+            } catch (exception) {
+                worker.postMessage({ action: 'open', buffer: r.result });
+            }
+        }
+        r.readAsArrayBuffer(f);
+    }
+
+    //保存数据库文件到本地
+    function savedb() {
+        worker.onmessage = function(event) {
+            toc("Exporting the database");
+            var arraybuff = event.data.buffer;
+            var blob = new Blob([arraybuff]);
+            var a = document.createElement("a");
+            a.href = window.URL.createObjectURL(blob);
+            a.download = "sql.db";
+            a.onclick = function() {
+                setTimeout(function() {
+                    window.URL.revokeObjectURL(a.href);
+                }, 1500);
+            };
+            a.click();
+        };
+        tic();
+        worker.postMessage({ action: 'export' });
+    }
+    savedbElm.addEventListener("click", savedb, true);
+    </script>
+</body>
+
+</html>
